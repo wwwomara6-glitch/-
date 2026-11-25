@@ -1,0 +1,587 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Global Helpers
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Exclusive Admin Identity: verified Google account wwwomara6@gmail.com only
+    function isAdmin() {
+      return isSignedIn()
+        && ('email_verified' in request.auth.token)
+        && request.auth.token.email_verified == true
+        && ('email' in request.auth.token)
+        && request.auth.token.email == 'wwwomara6@gmail.com';
+    }
+
+    function isValidId(id) {
+      return id is string
+        && id.size() >= 1
+        && id.size() <= 128
+        && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidChunkId(id) {
+      return id is string
+        && id.size() >= 7
+        && id.size() <= 12
+        && id.matches('^chunk_[0-9]{1,3}$');
+    }
+
+    function isValidRandomHex256(id) {
+      return id is string
+        && id.size() == 64
+        && id.matches('^[a-f0-9]{64}$');
+    }
+
+    function isValidPromoId(id) {
+      return id is string
+        && id.size() >= 2
+        && id.size() <= 24
+        && id.matches('^[A-Z0-9_\\-]+$');
+    }
+
+    function isNonEmptyString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidIsoString(val) {
+      return val is string && val.size() >= 10 && val.size() <= 40;
+    }
+
+    function isValidCategory(cat) {
+      return cat in [
+        'blaugrana',
+        'other_brands',
+        'body_mist',
+        'room_spray',
+        'deodorant',
+        'hair_care',
+        'tester'
+      ];
+    }
+
+    function isValidOrderStatus(st) {
+      return st in [
+        'تم الاستلام',
+        'قيد المراجعة',
+        'تم التجهيز',
+        'قيد التوصيل',
+        'تم التسليم'
+      ];
+    }
+
+    function isValidRequestStatus(st) {
+      return st in ['قيد البحث', 'تم التوفير', 'تم التواصل'];
+    }
+
+    // 3. Entity Validation Blueprints
+    function isValidStoreInfo(info) {
+      return info is map
+        && info.keys().hasAll([
+          'agencyName',
+          'locationText',
+          'city',
+          'freeDeliveryThresholdIqd',
+          'standardDeliveryFeeIqd',
+          'guaranteeTitle',
+          'guaranteeText'
+        ])
+        && info.keys().hasOnly([
+          'agencyName',
+          'locationText',
+          'city',
+          'freeDeliveryThresholdIqd',
+          'standardDeliveryFeeIqd',
+          'guaranteeTitle',
+          'guaranteeText'
+        ])
+        && isNonEmptyString(info.agencyName, 2, 120)
+        && isNonEmptyString(info.locationText, 2, 240)
+        && isNonEmptyString(info.city, 2, 100)
+        && info.freeDeliveryThresholdIqd is int
+        && info.freeDeliveryThresholdIqd >= 0
+        && info.standardDeliveryFeeIqd is int
+        && info.standardDeliveryFeeIqd >= 0
+        && isNonEmptyString(info.guaranteeTitle, 2, 200)
+        && isNonEmptyString(info.guaranteeText, 2, 600);
+    }
+
+    function isValidCatalogMeta(data) {
+      return data.keys().hasAll([
+          'version',
+          'productCount',
+          'chunkIds',
+          'storeInfo',
+          'socialLinks',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'version',
+          'productCount',
+          'chunkIds',
+          'storeInfo',
+          'socialLinks',
+          'updatedAt'
+        ])
+        && isNonEmptyString(data.version, 1, 64)
+        && data.version.matches('^[a-zA-Z0-9_\\-\\.]+$')
+        && data.productCount is int
+        && data.productCount >= 0
+        && data.productCount <= 5000
+        && data.chunkIds is list
+        && data.chunkIds.size() <= 30
+        && (data.chunkIds.size() == 0 || data.chunkIds[0] is string)
+        && isValidStoreInfo(data.storeInfo)
+        && data.socialLinks is list
+        && data.socialLinks.size() <= 20
+        && (data.socialLinks.size() == 0 || data.socialLinks[0] is map)
+        && isValidIsoString(data.updatedAt);
+    }
+
+    function isValidCatalogChunk(data) {
+      return data.keys().hasAll(['chunkIndex', 'version', 'items', 'updatedAt'])
+        && data.keys().hasOnly(['chunkIndex', 'version', 'items', 'updatedAt'])
+        && data.chunkIndex is int
+        && data.chunkIndex >= 0
+        && data.chunkIndex <= 50
+        && isNonEmptyString(data.version, 1, 64)
+        && data.version.matches('^[a-zA-Z0-9_\\-\\.]+$')
+        && data.items is list
+        && data.items.size() <= 150
+        && (data.items.size() == 0 || data.items[0] is map)
+        && isValidIsoString(data.updatedAt);
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll([
+          'id', 'code', 'name', 'brand', 'category', 'priceIqd', 'size',
+          'notes', 'longevity', 'sillage', 'description', 'imageUrl',
+          'includesFreeTester', 'inStock'
+        ])
+        && data.keys().hasOnly([
+          'id', 'code', 'name', 'brand', 'category', 'priceIqd', 'size',
+          'sizePrices', 'notes', 'topNotes', 'heartNotes', 'baseNotes',
+          'longevity', 'sillage', 'description', 'imageUrl', 'hasCustomImage',
+          'includesFreeTester', 'inStock', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isNonEmptyString(data.code, 1, 64)
+        && isNonEmptyString(data.name, 1, 160)
+        && isNonEmptyString(data.brand, 1, 120)
+        && isValidCategory(data.category)
+        && data.priceIqd is int
+        && data.priceIqd >= 500
+        && data.priceIqd <= 50000000
+        && isNonEmptyString(data.size, 1, 40)
+        && (!('sizePrices' in data) || (data.sizePrices is map && data.sizePrices.size() <= 10))
+        && isNonEmptyString(data.notes, 1, 600)
+        && (!('topNotes' in data) || (data.topNotes is string && data.topNotes.size() <= 240))
+        && (!('heartNotes' in data) || (data.heartNotes is string && data.heartNotes.size() <= 240))
+        && (!('baseNotes' in data) || (data.baseNotes is string && data.baseNotes.size() <= 240))
+        && isNonEmptyString(data.longevity, 1, 80)
+        && isNonEmptyString(data.sillage, 1, 80)
+        && isNonEmptyString(data.description, 1, 1000)
+        && isNonEmptyString(data.imageUrl, 1, 1000)
+        && (!('hasCustomImage' in data) || data.hasCustomImage is bool)
+        && data.includesFreeTester is bool
+        && data.inStock is bool
+        && (!('updatedAt' in data) || isValidIsoString(data.updatedAt));
+    }
+
+    function isValidPromoCode(data) {
+      return data.keys().hasAll([
+          'id', 'code', 'ownerName', 'discountType', 'discountValue',
+          'active', 'timesUsed', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'code', 'ownerName', 'discountType', 'discountValue',
+          'durationDays', 'expiresAt', 'active', 'timesUsed', 'createdAt'
+        ])
+        && isValidId(data.id)
+        && isValidPromoId(data.code)
+        && isNonEmptyString(data.ownerName, 2, 100)
+        && data.discountType in ['percent', 'fixed']
+        && data.discountValue is int
+        && (
+          (data.discountType == 'percent' && data.discountValue >= 1 && data.discountValue <= 100)
+          || (data.discountType == 'fixed' && data.discountValue >= 500 && data.discountValue <= 10000000)
+        )
+        && (!('durationDays' in data) || data.durationDays == null || (data.durationDays is int && data.durationDays >= 0 && data.durationDays <= 3650))
+        && (!('expiresAt' in data) || data.expiresAt == null || isValidIsoString(data.expiresAt))
+        && data.active is bool
+        && data.timesUsed is int
+        && data.timesUsed >= 0
+        && isValidIsoString(data.createdAt);
+    }
+
+    function isValidPricing(p) {
+      return p is map
+        && p.keys().hasAll([
+          'totalItemsCount', 'qualifyingPerfumeUnits', 'freeTestersCount',
+          'freePerfumeUnitsEarned', 'loyaltyDiscountIqd', 'promoDiscountIqd',
+          'rawSubtotalIqd', 'subtotalAfterDiscountIqd', 'deliveryFeeIqd',
+          'qualifiesForFreeDelivery', 'amountToFreeDeliveryIqd', 'totalIqd',
+          'priorPerfumeUnits', 'stampsBefore', 'stampsAfter', 'stampsNeededForNextFree'
+        ])
+        && p.keys().hasOnly([
+          'totalItemsCount', 'qualifyingPerfumeUnits', 'freeTestersCount',
+          'freePerfumeUnitsEarned', 'loyaltyDiscountIqd', 'promoDiscountIqd',
+          'promoCode', 'promoOwnerName', 'rawSubtotalIqd', 'subtotalAfterDiscountIqd',
+          'deliveryFeeIqd', 'qualifiesForFreeDelivery', 'amountToFreeDeliveryIqd',
+          'totalIqd', 'priorPerfumeUnits', 'stampsBefore', 'stampsAfter',
+          'stampsNeededForNextFree'
+        ])
+        && p.totalItemsCount is int && p.totalItemsCount >= 1 && p.totalItemsCount <= 100
+        && p.rawSubtotalIqd is int && p.rawSubtotalIqd >= 500
+        && p.loyaltyDiscountIqd is int && p.loyaltyDiscountIqd >= 0
+        && p.promoDiscountIqd is int && p.promoDiscountIqd >= 0
+        && p.subtotalAfterDiscountIqd is int && p.subtotalAfterDiscountIqd >= 0
+        && p.deliveryFeeIqd is int && p.deliveryFeeIqd in [0, 5000]
+        && p.totalIqd is int && p.totalIqd == p.subtotalAfterDiscountIqd + p.deliveryFeeIqd
+        && (!('promoCode' in p) || (p.promoCode is string && p.promoCode.size() <= 24))
+        && (!('promoOwnerName' in p) || (p.promoOwnerName is string && p.promoOwnerName.size() <= 100));
+    }
+
+    function isValidOrderShape(data) {
+      return data.keys().hasAll([
+          'id', 'orderNumber', 'trackingToken', 'createdAt', 'fullName',
+          'exactLocation', 'birthDate', 'phone', 'items', 'pricing',
+          'voucherCode', 'status', 'estimatedArrival', 'statusMessage', 'statusHistory'
+        ])
+        && data.keys().hasOnly([
+          'id', 'orderNumber', 'trackingToken', 'createdAt', 'fullName',
+          'exactLocation', 'birthDate', 'phone', 'items', 'pricing',
+          'voucherCode', 'status', 'estimatedArrival', 'statusMessage',
+          'statusHistory', 'deliveredAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.orderNumber is string && data.orderNumber.size() >= 4 && data.orderNumber.size() <= 32
+        && data.orderNumber.matches('^BG-[0-9]{4,10}$')
+        && isValidRandomHex256(data.trackingToken)
+        && isValidIsoString(data.createdAt)
+        && isNonEmptyString(data.fullName, 3, 120)
+        && isNonEmptyString(data.exactLocation, 5, 300)
+        && isNonEmptyString(data.birthDate, 4, 24)
+        && isNonEmptyString(data.phone, 10, 20)
+        && data.items is list && data.items.size() >= 1 && data.items.size() <= 50 && data.items[0] is map
+        && isValidPricing(data.pricing)
+        && isNonEmptyString(data.voucherCode, 4, 32)
+        && isValidOrderStatus(data.status)
+        && isNonEmptyString(data.estimatedArrival, 2, 120)
+        && isNonEmptyString(data.statusMessage, 2, 500)
+        && data.statusHistory is list && data.statusHistory.size() >= 1 && data.statusHistory.size() <= 20 && data.statusHistory[0] is map
+        && (!('deliveredAt' in data) || isValidIsoString(data.deliveredAt))
+        && (!('updatedAt' in data) || isValidIsoString(data.updatedAt));
+    }
+
+    function isValidNewOrder(data) {
+      return isValidOrderShape(data)
+        && data.status == 'تم الاستلام'
+        && !('deliveredAt' in data)
+        && data.statusHistory.size() == 1;
+    }
+
+    function isValidOrderUpdate(next, prev) {
+      return isValidOrderShape(next)
+        && next.id == prev.id
+        && next.orderNumber == prev.orderNumber
+        && next.trackingToken == prev.trackingToken
+        && next.createdAt == prev.createdAt
+        && next.diff(prev).affectedKeys().hasOnly([
+          'status', 'estimatedArrival', 'statusMessage', 'statusHistory', 'deliveredAt', 'updatedAt'
+        ]);
+    }
+
+    function isValidOrderTrackingShape(data) {
+      return data.keys().hasAll([
+          'orderId', 'orderNumber', 'createdAt', 'itemsSummary',
+          'totalIqd', 'voucherCode', 'status', 'estimatedArrival', 'statusMessage', 'statusHistory'
+        ])
+        && data.keys().hasOnly([
+          'orderId', 'orderNumber', 'createdAt', 'deliveredAt',
+          'itemsSummary', 'totalIqd', 'voucherCode', 'status', 'estimatedArrival',
+          'statusMessage', 'statusHistory'
+        ])
+        && isValidId(data.orderId)
+        && data.orderNumber is string && data.orderNumber.matches('^BG-[0-9]{4,10}$')
+        && isValidIsoString(data.createdAt)
+        && (!('deliveredAt' in data) || isValidIsoString(data.deliveredAt))
+        && isNonEmptyString(data.itemsSummary, 2, 800)
+        && data.totalIqd is int && data.totalIqd >= 0
+        && isNonEmptyString(data.voucherCode, 4, 32)
+        && isValidOrderStatus(data.status)
+        && isNonEmptyString(data.estimatedArrival, 2, 120)
+        && isNonEmptyString(data.statusMessage, 2, 500)
+        && data.statusHistory is list && data.statusHistory.size() >= 1 && data.statusHistory.size() <= 20 && data.statusHistory[0] is map;
+    }
+
+    function isValidNewOrderTracking(data) {
+      return isValidOrderTrackingShape(data)
+        && data.status == 'تم الاستلام'
+        && !('deliveredAt' in data);
+    }
+
+    function isValidOrderTrackingUpdate(next, prev) {
+      return isValidOrderTrackingShape(next)
+        && next.orderId == prev.orderId
+        && next.orderNumber == prev.orderNumber
+        && next.createdAt == prev.createdAt
+        && next.diff(prev).affectedKeys().hasOnly([
+          'status', 'estimatedArrival', 'statusMessage', 'statusHistory', 'deliveredAt'
+        ]);
+    }
+
+    function isValidCustomRequestShape(data) {
+      return data.keys().hasAll([
+          'id', 'createdAt', 'perfumeName', 'expectedPriceIqd', 'size',
+          'desiredDate', 'customerName', 'customerPhone', 'notes', 'status'
+        ])
+        && data.keys().hasOnly([
+          'id', 'createdAt', 'perfumeName', 'expectedPriceIqd', 'size',
+          'desiredDate', 'customerName', 'customerPhone', 'notes', 'status'
+        ])
+        && isValidId(data.id)
+        && isValidIsoString(data.createdAt)
+        && isNonEmptyString(data.perfumeName, 2, 160)
+        && data.expectedPriceIqd is int && data.expectedPriceIqd >= 500 && data.expectedPriceIqd <= 50000000
+        && isNonEmptyString(data.size, 2, 40)
+        && isNonEmptyString(data.desiredDate, 4, 32)
+        && isNonEmptyString(data.customerName, 2, 120)
+        && isNonEmptyString(data.customerPhone, 10, 20)
+        && data.notes is string && data.notes.size() <= 500
+        && isValidRequestStatus(data.status);
+    }
+
+    function isValidNewCustomRequest(data) {
+      return isValidCustomRequestShape(data) && data.status == 'قيد البحث';
+    }
+
+    function isValidCustomRequestUpdate(next, prev) {
+      return isValidCustomRequestShape(next)
+        && next.id == prev.id
+        && next.createdAt == prev.createdAt
+        && next.diff(prev).affectedKeys().hasOnly(['status']);
+    }
+
+    function isValidLoyaltyProfile(data) {
+      return data.keys().hasAll([
+          'loyaltyKey', 'totalQualifyingPerfumes', 'stamps',
+          'stampsRemainingForFree', 'freePerfumesRedeemed', 'voucherCode', 'ordersCount'
+        ])
+        && data.keys().hasOnly([
+          'loyaltyKey', 'totalQualifyingPerfumes', 'stamps',
+          'stampsRemainingForFree', 'freePerfumesRedeemed', 'voucherCode', 'ordersCount', 'updatedAt'
+        ])
+        && isValidRandomHex256(data.loyaltyKey)
+        && data.totalQualifyingPerfumes is int && data.totalQualifyingPerfumes >= 0
+        && data.stamps is int && data.stamps >= 0 && data.stamps <= 4
+        && data.stampsRemainingForFree is int && data.stampsRemainingForFree >= 1 && data.stampsRemainingForFree <= 5
+        && data.freePerfumesRedeemed is int && data.freePerfumesRedeemed >= 0
+        && isNonEmptyString(data.voucherCode, 4, 32)
+        && data.ordersCount is int && data.ordersCount >= 0
+        && (!('updatedAt' in data) || isValidIsoString(data.updatedAt));
+    }
+
+    function isValidAdminNotification(data) {
+      return data.keys().hasAll([
+          'id', 'createdAt', 'type', 'customerName', 'customerPhone',
+          'itemsSummary', 'message', 'read'
+        ])
+        && data.keys().hasOnly([
+          'id', 'createdAt', 'type', 'orderId', 'orderNumber', 'customerName',
+          'customerPhone', 'exactLocation', 'totalIqd', 'itemsSummary', 'message', 'read'
+        ])
+        && isValidId(data.id)
+        && isValidIsoString(data.createdAt)
+        && data.type in ['new_order', 'custom_request']
+        && (!('orderId' in data) || isValidId(data.orderId))
+        && (!('orderNumber' in data) || isNonEmptyString(data.orderNumber, 4, 32))
+        && isNonEmptyString(data.customerName, 2, 120)
+        && isNonEmptyString(data.customerPhone, 10, 20)
+        && (!('exactLocation' in data) || isNonEmptyString(data.exactLocation, 5, 300))
+        && (!('totalIqd' in data) || (data.totalIqd is int && data.totalIqd >= 0))
+        && isNonEmptyString(data.itemsSummary, 2, 800)
+        && isNonEmptyString(data.message, 2, 2000)
+        && data.read is bool;
+    }
+
+    function isValidOrderCounter(data) {
+      return data.keys().hasAll(['nextSequence', 'updatedAt'])
+        && data.keys().hasOnly(['nextSequence', 'updatedAt'])
+        && data.nextSequence is int && data.nextSequence >= 1001 && data.nextSequence <= 99999999
+        && isValidIsoString(data.updatedAt);
+    }
+
+    function isValidBackupRecord(data) {
+      return data.keys().hasAll(['id', 'createdAt', 'createdBy', 'productCount', 'checksumSha256'])
+        && data.keys().hasOnly(['id', 'createdAt', 'createdBy', 'productCount', 'checksumSha256', 'summary'])
+        && isValidId(data.id)
+        && isValidIsoString(data.createdAt)
+        && isNonEmptyString(data.createdBy, 5, 160)
+        && data.productCount is int && data.productCount >= 0 && data.productCount <= 5000
+        && isValidRandomHex256(data.checksumSha256)
+        && (!('summary' in data) || (data.summary is string && data.summary.size() <= 400));
+    }
+
+    // 4. Collection Match Blocks (Zero-Trust Hardening)
+
+    // Public connectivity probe only
+    match /test/connection {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // Admin registry: read-only by owner, zero client writes
+    match /admins/{uid} {
+      allow get: if isAdmin() && isValidId(uid);
+      allow list: if isAdmin();
+      allow write: if false;
+    }
+
+    // Public storefront snapshot metadata: public get('public') only; admin writes
+    match /catalog_meta/{metaId} {
+      allow get: if metaId == 'public';
+      allow list: if false;
+      allow create, update: if isAdmin() && metaId == 'public' && isValidCatalogMeta(incoming());
+      allow delete: if false;
+    }
+
+    // Public catalog chunks: public get('chunk_N') only; admin writes
+    match /catalog_chunks/{chunkId} {
+      allow get: if isValidChunkId(chunkId);
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidChunkId(chunkId) && isValidCatalogChunk(incoming());
+      allow delete: if isAdmin() && isValidChunkId(chunkId);
+    }
+
+    // Product catalog records: single-doc get allowed for detail view; list & all writes strictly admin-only
+    match /products/{productId} {
+      allow get: if isValidId(productId);
+      allow list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(productId)
+        && incoming().id == productId
+        && isValidProduct(incoming());
+      allow update: if isAdmin()
+        && isValidId(productId)
+        && isValidProduct(incoming())
+        && incoming().id == existing().id;
+      allow delete: if isAdmin() && isValidId(productId);
+    }
+
+    // Promo codes: ZERO public read or write; validated strictly server-side / Worker
+    match /promoCodes/{codeId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidPromoId(codeId)
+        && incoming().code == codeId
+        && isValidPromoCode(incoming());
+      allow update: if isAdmin()
+        && isValidPromoId(codeId)
+        && isValidPromoCode(incoming())
+        && incoming().id == existing().id
+        && incoming().code == existing().code
+        && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidPromoId(codeId);
+    }
+
+    // Customer orders: ZERO public read or direct browser create; server-recomputed & admin-only in rules
+    match /orders/{orderId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(orderId)
+        && incoming().id == orderId
+        && isValidNewOrder(incoming());
+      allow update: if isAdmin()
+        && isValidId(orderId)
+        && isValidOrderUpdate(incoming(), existing());
+      allow delete: if isAdmin() && isValidId(orderId);
+    }
+
+    // Order tracking: random 256-bit trackingToken; ZERO public read/write in Firestore rules (verified via Worker)
+    match /orderTrackings/{trackingToken} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidRandomHex256(trackingToken)
+        && isValidNewOrderTracking(incoming());
+      allow update: if isAdmin()
+        && isValidRandomHex256(trackingToken)
+        && isValidOrderTrackingUpdate(incoming(), existing());
+      allow delete: if isAdmin() && isValidRandomHex256(trackingToken);
+    }
+
+    // Custom perfume requests: ZERO direct browser writes (anti-spam via Worker); admin-only in Firestore rules
+    match /customRequests/{requestId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(requestId)
+        && incoming().id == requestId
+        && isValidNewCustomRequest(incoming());
+      allow update: if isAdmin()
+        && isValidId(requestId)
+        && isValidCustomRequestUpdate(incoming(), existing());
+      allow delete: if isAdmin() && isValidId(requestId);
+    }
+
+    // Loyalty 4+1 profiles: ZERO public read/write (no unsalted phone hash exposure); verified via Worker
+    match /loyaltyLookups/{loyaltyId} {
+      allow get, list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidRandomHex256(loyaltyId)
+        && incoming().loyaltyKey == loyaltyId
+        && isValidLoyaltyProfile(incoming());
+      allow delete: if isAdmin() && isValidRandomHex256(loyaltyId);
+    }
+
+    // Admin notifications: strictly admin-only
+    match /notifications/{notificationId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(notificationId)
+        && incoming().id == notificationId
+        && isValidAdminNotification(incoming());
+      allow update: if isAdmin()
+        && isValidId(notificationId)
+        && isValidAdminNotification(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow delete: if isAdmin() && isValidId(notificationId);
+    }
+
+    // Order sequence counters: strictly admin-only
+    match /counters/{counterId} {
+      allow get, list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(counterId)
+        && isValidOrderCounter(incoming());
+      allow delete: if false;
+    }
+
+    // Admin backup audit log: strictly admin-only
+    match /backups/{backupId} {
+      allow get, list: if isAdmin();
+      allow create: if isAdmin()
+        && isValidId(backupId)
+        && incoming().id == backupId
+        && incoming().createdBy == request.auth.token.email
+        && isValidBackupRecord(incoming());
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(backupId);
+    }
+  }
+}

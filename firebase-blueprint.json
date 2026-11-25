@@ -1,0 +1,755 @@
+{
+  "entities": {
+    "TestConnection": {
+      "title": "TestConnection",
+      "description": "Lightweight document used to verify Firestore server connectivity at startup.",
+      "type": "object",
+      "properties": {
+        "ok": {
+          "type": "boolean",
+          "description": "Connectivity probe status."
+        }
+      }
+    },
+    "AdminAccount": {
+      "title": "AdminAccount",
+      "description": "Trusted administrator record locked to verified owner wwwomara6@gmail.com.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160,
+          "description": "Verified owner email address."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["owner"],
+          "description": "Fixed owner role."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        }
+      },
+      "required": ["email", "role", "updatedAt"]
+    },
+    "CatalogMeta": {
+      "title": "CatalogMeta",
+      "description": "Single-read public storefront configuration, version tag, and social links.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-\\.]+$"
+        },
+        "productCount": {
+          "type": "integer"
+        },
+        "chunkIds": {
+          "type": "array",
+          "description": "Bounded list of catalog chunk IDs (chunk_0, chunk_1, ...)."
+        },
+        "storeInfo": {
+          "type": "object",
+          "description": "Agency name, location, delivery thresholds, and guarantee info."
+        },
+        "socialLinks": {
+          "type": "array",
+          "description": "Bounded list of public social contact links."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        }
+      },
+      "required": ["version", "productCount", "chunkIds", "storeInfo", "socialLinks", "updatedAt"]
+    },
+    "CatalogChunk": {
+      "title": "CatalogChunk",
+      "description": "Bundled read-optimized chunk of catalog items to keep daily Spark reads within 1-3 per visit.",
+      "type": "object",
+      "properties": {
+        "chunkIndex": {
+          "type": "integer"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-\\.]+$"
+        },
+        "items": {
+          "type": "array",
+          "description": "Bounded chunk of up to 150 product objects."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        }
+      },
+      "required": ["chunkIndex", "version", "items", "updatedAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Perfume or cosmetic product record managed exclusively by the store admin.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "brand": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "blaugrana",
+            "other_brands",
+            "body_mist",
+            "room_spray",
+            "deodorant",
+            "hair_care",
+            "tester"
+          ]
+        },
+        "priceIqd": {
+          "type": "integer"
+        },
+        "size": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "sizePrices": {
+          "type": "object"
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "topNotes": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "heartNotes": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "baseNotes": {
+          "type": "string",
+          "maxLength": 240
+        },
+        "longevity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "sillage": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "hasCustomImage": {
+          "type": "boolean"
+        },
+        "includesFreeTester": {
+          "type": "boolean"
+        },
+        "inStock": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        }
+      },
+      "required": [
+        "id",
+        "code",
+        "name",
+        "brand",
+        "category",
+        "priceIqd",
+        "size",
+        "notes",
+        "longevity",
+        "sillage",
+        "description",
+        "imageUrl",
+        "includesFreeTester",
+        "inStock"
+      ]
+    },
+    "PromoCode": {
+      "title": "PromoCode",
+      "description": "Private promo code record; admin-only in Firestore, validated server-side via trusted Worker without leaking ownerName or timesUsed.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 24,
+          "pattern": "^[A-Z0-9_\\-]+$"
+        },
+        "ownerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "discountType": {
+          "type": "string",
+          "enum": ["percent", "fixed"]
+        },
+        "discountValue": {
+          "type": "integer"
+        },
+        "durationDays": {
+          "type": "integer"
+        },
+        "expiresAt": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "timesUsed": {
+          "type": "integer"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        }
+      },
+      "required": [
+        "id",
+        "code",
+        "ownerName",
+        "discountType",
+        "discountValue",
+        "active",
+        "timesUsed",
+        "createdAt"
+      ]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Full customer order created and priced exclusively by trusted server/Worker logic; admin-only in Firestore rules.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "orderNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^BG-[0-9]{4,10}$"
+        },
+        "trackingToken": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "Cryptographically random 256-bit token not derived from phone or orderNumber."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "exactLocation": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 300
+        },
+        "birthDate": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 20
+        },
+        "items": {
+          "type": "array"
+        },
+        "pricing": {
+          "type": "object"
+        },
+        "voucherCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "تم الاستلام",
+            "قيد المراجعة",
+            "تم التجهيز",
+            "قيد التوصيل",
+            "تم التسليم"
+          ]
+        },
+        "estimatedArrival": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "statusMessage": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 500
+        },
+        "statusHistory": {
+          "type": "array"
+        },
+        "deliveredAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        }
+      },
+      "required": [
+        "id",
+        "orderNumber",
+        "trackingToken",
+        "createdAt",
+        "fullName",
+        "exactLocation",
+        "birthDate",
+        "phone",
+        "items",
+        "pricing",
+        "voucherCode",
+        "status",
+        "estimatedArrival",
+        "statusMessage",
+        "statusHistory"
+      ]
+    },
+    "OrderTracking": {
+      "title": "OrderTracking",
+      "description": "PII-minimized tracking status document keyed by cryptographically random 256-bit trackingToken; admin/trusted-backend only in Firestore rules.",
+      "type": "object",
+      "properties": {
+        "orderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "orderNumber": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32,
+          "pattern": "^BG-[0-9]{4,10}$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "deliveredAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "itemsSummary": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 800
+        },
+        "totalIqd": {
+          "type": "integer"
+        },
+        "voucherCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "تم الاستلام",
+            "قيد المراجعة",
+            "تم التجهيز",
+            "قيد التوصيل",
+            "تم التسليم"
+          ]
+        },
+        "estimatedArrival": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "statusMessage": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 500
+        },
+        "statusHistory": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "orderId",
+        "orderNumber",
+        "createdAt",
+        "itemsSummary",
+        "totalIqd",
+        "voucherCode",
+        "status",
+        "estimatedArrival",
+        "statusMessage",
+        "statusHistory"
+      ]
+    },
+    "CustomRequest": {
+      "title": "CustomRequest",
+      "description": "Custom perfume sourcing request submitted through anti-spam protected Worker; admin-only in Firestore rules.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "perfumeName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "expectedPriceIqd": {
+          "type": "integer"
+        },
+        "size": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40
+        },
+        "desiredDate": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "customerPhone": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 20
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "status": {
+          "type": "string",
+          "enum": ["قيد البحث", "تم التوفير", "تم التواصل"]
+        }
+      },
+      "required": [
+        "id",
+        "createdAt",
+        "perfumeName",
+        "expectedPriceIqd",
+        "size",
+        "desiredDate",
+        "customerName",
+        "customerPhone",
+        "notes",
+        "status"
+      ]
+    },
+    "LoyaltyProfile": {
+      "title": "LoyaltyProfile",
+      "description": "4+1 loyalty stamp summary keyed by server-salted HMAC-SHA256; admin/trusted-backend only in Firestore rules.",
+      "type": "object",
+      "properties": {
+        "loyaltyKey": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "totalQualifyingPerfumes": {
+          "type": "integer"
+        },
+        "stamps": {
+          "type": "integer"
+        },
+        "stampsRemainingForFree": {
+          "type": "integer"
+        },
+        "freePerfumesRedeemed": {
+          "type": "integer"
+        },
+        "voucherCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 32
+        },
+        "ordersCount": {
+          "type": "integer"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        }
+      },
+      "required": [
+        "loyaltyKey",
+        "totalQualifyingPerfumes",
+        "stamps",
+        "stampsRemainingForFree",
+        "freePerfumesRedeemed",
+        "voucherCode",
+        "ordersCount"
+      ]
+    },
+    "AdminNotification": {
+      "title": "AdminNotification",
+      "description": "Admin notification feed; strictly admin-only read and write in Firestore rules.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "type": {
+          "type": "string",
+          "enum": ["new_order", "custom_request"]
+        },
+        "orderId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "orderNumber": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "customerPhone": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 20
+        },
+        "exactLocation": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "totalIqd": {
+          "type": "integer"
+        },
+        "itemsSummary": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 800
+        },
+        "message": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 2000
+        },
+        "read": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "createdAt",
+        "type",
+        "customerName",
+        "customerPhone",
+        "itemsSummary",
+        "message",
+        "read"
+      ]
+    },
+    "OrderCounter": {
+      "title": "OrderCounter",
+      "description": "Sequential order counter state; admin/trusted-backend only.",
+      "type": "object",
+      "properties": {
+        "nextSequence": {
+          "type": "integer"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        }
+      },
+      "required": ["nextSequence", "updatedAt"]
+    },
+    "BackupRecord": {
+      "title": "BackupRecord",
+      "description": "Admin-only snapshot metadata and export record.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 40
+        },
+        "createdBy": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 160
+        },
+        "productCount": {
+          "type": "integer"
+        },
+        "checksumSha256": {
+          "type": "string",
+          "minLength": 64,
+          "maxLength": 64,
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 400
+        }
+      },
+      "required": ["id", "createdAt", "createdBy", "productCount", "checksumSha256"]
+    }
+  },
+  "firestore": {
+    "/test/connection": {
+      "schema": { "$ref": "#/entities/TestConnection" },
+      "description": "Connectivity probe document; read-only get allowed for startup check."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminAccount" },
+      "description": "Admin identity records; admin-only read, no client writes."
+    },
+    "/catalog_meta/{metaId}": {
+      "schema": { "$ref": "#/entities/CatalogMeta" },
+      "description": "Public storefront metadata (public doc get-only for visitors); admin-only writes."
+    },
+    "/catalog_chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/CatalogChunk" },
+      "description": "Read-optimized catalog chunks (chunk_N get-only for visitors); admin-only writes."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Product records (single get for visitors, list & writes strictly admin-only)."
+    },
+    "/promoCodes/{codeId}": {
+      "schema": { "$ref": "#/entities/PromoCode" },
+      "description": "Private promo code records; strictly admin-only in Firestore rules."
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Full customer orders with PII; strictly admin-only in Firestore rules."
+    },
+    "/orderTrackings/{trackingToken}": {
+      "schema": { "$ref": "#/entities/OrderTracking" },
+      "description": "Order tracking views keyed by random 256-bit token; strictly admin-only in Firestore rules."
+    },
+    "/customRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/CustomRequest" },
+      "description": "Custom perfume sourcing requests; strictly admin-only in Firestore rules."
+    },
+    "/loyaltyLookups/{loyaltyId}": {
+      "schema": { "$ref": "#/entities/LoyaltyProfile" },
+      "description": "4+1 loyalty profiles keyed by salted HMAC; strictly admin-only in Firestore rules."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/AdminNotification" },
+      "description": "Admin notification feed; strictly admin-only in Firestore rules."
+    },
+    "/counters/{counterId}": {
+      "schema": { "$ref": "#/entities/OrderCounter" },
+      "description": "Sequential order counter state; strictly admin-only in Firestore rules."
+    },
+    "/backups/{backupId}": {
+      "schema": { "$ref": "#/entities/BackupRecord" },
+      "description": "Backup audit metadata; strictly admin-only in Firestore rules."
+    }
+  }
+}

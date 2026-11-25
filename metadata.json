@@ -1,0 +1,6 @@
+{
+  "name": "بلوكرانا للعطور | Blaugrana Perfumes",
+  "description": "وكالة بلوكرانا للعطور في العراق - ديالى - بعقوبة. عطور أصلية ومرقمة، معطرات جسم، مزيلات عرق، تيسترات تجربة مع ضمان الثبات والفوحان، خدمة وفرلي عطري، وقسيمة الولاء 4+1 مجاني.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
